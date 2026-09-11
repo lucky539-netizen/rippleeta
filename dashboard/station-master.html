@@ -58,19 +58,29 @@
         
         <div class="triage-matrix">
             <div class="decision-card" id="triage-card">
-                <span class="decision-kicker" data-i18n="smKicker">PLATFORM ALLOCATION</span>
+                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                  <span class="decision-kicker" data-i18n="smKicker">PLATFORM ALLOCATION</span>
+                  <span id="triage-urgency-badge" class="urgency-badge" style="background:rgba(232,163,61,0.2); color:var(--signal);">NORMAL</span>
+                </div>
                 <h2 class="decision-status" id="triage-decision">--</h2>
+
+                <!-- Confidence Gauge Visual (Rotates to Real Angle) -->
+                <div class="gauge-needle-wrap">
+                  <div class="gauge-needle-pivot"></div>
+                  <div id="sm-gauge-arm" class="gauge-needle-arm"></div>
+                </div>
+
                 <div class="decision-details" id="triage-details">
                     Train: <span id="triage-train">--</span><br>
                     P50 ETA: <span id="triage-p50">--</span> min<br>
                     P10 / P90: <span id="triage-p10">--</span> / <span id="triage-p90">--</span> min<br>
-                    Deadline: <span id="triage-deadline">--</span> min<br>
+                    Decision Needed In: <span id="triage-deadline">--</span><br>
                     <br>
                     <span id="triage-msg">Loading data...</span>
                 </div>
             </div>
             
-            <div class="decision-card" style="background:var(--primary); border:none;">
+            <div class="decision-card" id="triage-vhf-card" style="background:var(--primary); border:none;">
                 <span class="decision-kicker" style="color:rgba(243,237,227,0.5);" data-i18n="smVhfKicker">VHF SYNTHESIS</span>
                 <pre id="triage-vhf" style="font-family:var(--mono); font-size:1.1rem; color:var(--surface); line-height:1.6; margin:0;">
 AWAITING DATA...

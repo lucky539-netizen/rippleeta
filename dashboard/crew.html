@@ -56,17 +56,26 @@
       <section class="view-panel is-active" id="crew-view" data-panel="crew">
         
         <div class="hoer-overlap-container">
-            <h2 class="hoer-title" data-i18n="crewOverlapTitle">HOER vs Arrival Overlap</h2>
-            <p class="hoer-sub" id="hoer-train-label">Evaluating focal train...</p>
-            
-            <div class="hoer-track" id="hoer-track">
-                <!-- Javascript will inject the bars -->
-                <div class="hoer-marker" style="left:50%">Loading data...</div>
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom: 0.5rem;">
+              <div>
+                <h2 class="hoer-title" data-i18n="crewOverlapTitle">HOER vs Arrival Overlap</h2>
+                <p class="hoer-sub" id="hoer-train-label">Evaluating focal train...</p>
+              </div>
+              <div id="duty-threat-badge" class="urgency-badge" style="background:rgba(61,122,92,0.15); color:var(--success); border:1px solid currentColor;">
+                SAFE COMPLIANCE
+              </div>
             </div>
             
-            <p class="hoer-status" id="hoer-status">--</p>
+            <div class="hoer-track" id="hoer-track" style="position:relative; min-height:48px; background:rgba(27,42,74,0.06); border-radius:6px; overflow:hidden; margin: 1.5rem 0;">
+                <!-- Javascript injects scaleX bars and hazard zone -->
+                <div class="hoer-marker" style="padding:12px; font-family:var(--mono); color:var(--muted);">Loading duty limit model...</div>
+            </div>
             
-            <div style="text-align:center; margin-top: 2rem;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:1rem;">
+              <p class="hoer-status" id="hoer-status" style="margin:0;">--</p>
+              <div id="relief-countdown-wrap" style="font-family:var(--mono); font-size:0.85rem; color:var(--primary); font-weight:600;">
+                Sign-on target: <span id="relief-countdown-digits" class="odometer-counter">--:--:--</span>
+              </div>
             </div>
         </div>
         

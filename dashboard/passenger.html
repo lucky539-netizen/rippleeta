@@ -56,11 +56,23 @@
 
       <section class="view-panel is-active" id="passenger-view" data-panel="passenger" data-lang="en">
         
+        <!-- Anomaly Banner: Triggers ONLY on real anomaly_flag -->
+        <div id="pax-anomaly-banner" class="anomaly-alert-banner" role="alert">
+          <span>⚠️ PREDICTION SUSPENDED — UNUSUAL DELAY / ANOMALY DETECTED</span>
+          <span style="font-size:0.75rem; opacity:0.85;">Switching to manual monitoring</span>
+        </div>
+
         <!-- The Honest Ticket -->
         <div class="passenger-ticket" role="region" aria-label="Arrival window ticket" aria-live="polite">
             <div class="ticket-header">
-                <span id="ticket-train">TRAIN --</span>
-                <span id="ticket-date">DATE --</span>
+                <div>
+                  <span id="ticket-train">TRAIN --</span>
+                  <span id="ticket-date" style="margin-left: 0.75rem;">DATE --</span>
+                </div>
+                <div id="pax-trend-badge" class="trend-badge stable">
+                  <span id="pax-trend-text">STABLE</span>
+                  <span class="trend-arrow">→</span>
+                </div>
             </div>
             
             <div class="ticket-window-block">

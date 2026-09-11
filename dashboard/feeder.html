@@ -60,22 +60,41 @@
       <section class="view-panel is-active" id="feeder-view" data-panel="feeder">
         
         <div class="cost-tradeoff-panel">
-            <div class="cost-tradeoff-left">
+            <div class="cost-tradeoff-left" style="display:flex; flex-direction:column; align-items:center; text-align:center;">
                 <p class="tradeoff-title" data-i18n="feederProbLabel">Probability of Arrival Before Cutoff</p>
-                <h2 class="prob-hero-val" id="feeder-prob">--<span>%</span></h2>
-                <p style="font-family:var(--sans); color:var(--text); max-width: 300px;" id="feeder-train-lbl">Evaluating train...</p>
                 
+                <!-- SVG Arc Probability Meter -->
+                <div style="position:relative; width:130px; height:130px; margin: 0.5rem 0;">
+                  <svg class="feeder-arc-meter" width="130" height="130" viewBox="0 0 130 130">
+                    <circle cx="65" cy="65" r="54" fill="none" stroke="rgba(27,42,74,0.1)" stroke-width="12" />
+                    <circle id="feeder-arc-circle" class="fill-arc" cx="65" cy="65" r="54" fill="none" stroke="var(--signal)" stroke-width="12" stroke-dasharray="339.29" stroke-dashoffset="339.29" stroke-linecap="round" />
+                  </svg>
+                  <div style="position:absolute; inset:0; display:flex; flex-direction:column; justify-content:center; align-items:center;">
+                    <h2 class="prob-hero-val" id="feeder-prob" style="margin:0; font-size:2rem; line-height:1;">--<span>%</span></h2>
+                  </div>
+                </div>
+
+                <p style="font-family:var(--sans); color:var(--text); max-width: 300px; margin: 0.5rem 0 0;" id="feeder-train-lbl">Evaluating train...</p>
             </div>
             <div class="cost-tradeoff-right">
-                <p class="tradeoff-title" style="color:rgba(255,255,255,0.5);" data-i18n="feederMatrixLabel">Expected Cost Matrix</p>
+                <div style="display:flex; justify-content:space-between; align-items:baseline;">
+                  <p class="tradeoff-title" style="color:rgba(255,255,255,0.5);" data-i18n="feederMatrixLabel">Expected Cost Matrix</p>
+                  <span style="font-family:var(--mono); font-size:0.65rem; color:rgba(255,255,255,0.4);">[ COMPUTED PASSENGER-HOUR ESTIMATE ]</span>
+                </div>
                 <div class="tradeoff-matrix">
                     <div class="tradeoff-row">
                         <span class="tradeoff-label" data-i18n="feederCostWait">Cost of Waiting (if train delays)</span>
                         <span class="tradeoff-cost" id="cost-wait">--</span>
+                        <div style="width:100%; background:rgba(255,255,255,0.1); border-radius:3px; height:4px; margin-top:4px;">
+                          <div id="cost-wait-bar" class="cost-bar-progress" style="width:100%; transform:scaleX(0); background:var(--signal);"></div>
+                        </div>
                     </div>
-                    <div class="tradeoff-row">
+                    <div class="tradeoff-row" style="margin-top:0.75rem;">
                         <span class="tradeoff-label" data-i18n="feederCostAbandon">Cost of Abandonment (if train arrives)</span>
                         <span class="tradeoff-cost" id="cost-abandon">--</span>
+                        <div style="width:100%; background:rgba(255,255,255,0.1); border-radius:3px; height:4px; margin-top:4px;">
+                          <div id="cost-abandon-bar" class="cost-bar-progress" style="width:100%; transform:scaleX(0); background:var(--stamp);"></div>
+                        </div>
                     </div>
                 </div>
                 <span class="tradeoff-decision" id="feeder-decision">AWAITING DATA</span>

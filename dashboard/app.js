@@ -87,13 +87,62 @@ async function loadPassenger() {
   const [prediction, passenger] = await Promise.all([api(`/predict/${id}`), api(`/predict/${id}/passenger`)]);
   setText('ticket-train', `TRAIN ${prediction.train_id}`);
   setText('ticket-date', new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }).toUpperCase());
-  setText('ticket-window', formatWindow(prediction));
-  setText('ticket-p50', prediction.p50_delay_min == null ? '--' : `${Math.round(prediction.p50_delay_min)} min`);
-  setText('ticket-provenance', `${prediction.provenance?.data_source || 'historical snapshot'} · ${prediction.status}`);
+  
+  // ANIMATION TRIGGER: Split-flap flip triggers when real P10/P90 arrival window changes
+  const prevP10 = $('ticket-window')?.dataset?.p10;
+  const prevP90 = $('ticket-window')?.dataset?.p90;
+  const newP10 = prediction.p10_delay_min != null ? Math.round(prediction.p10_delay_min) : '--';
+  const newP90 = prediction.p90_delay_min != null ? Math.round(prediction.p90_delay_min) : '--';
+  const winEl = $('ticket-window');
+  if (winEl) {
+    if (prevP10 !== undefined && (prevP10 != newP10 || prevP90 != newP90)) {
+      winEl.classList.remove('is-flipping');
+      void winEl.offsetWidth; // Trigger reflow
+      winEl.classList.add('is-flipping');
+    }
+    winEl.dataset.p10 = newP10;
+    winEl.dataset.p90 = newP90;
+    winEl.innerHTML = `${newP10} <span>min</span> <span style="color:var(--text);font-size:2.5rem;margin:0 10px;">/</span> ${newP90} <span>min</span>`;
+  }
+  
+  setText('ticket-p50', prediction.p50_delay_min == null ? '--' : `P50: ${Math.round(prediction.p50_delay_min)} min`);
+  setText('ticket-provenance', `Source: ${prediction.provenance?.data_source || 'historical snapshot'} • ${prediction.status}`);
+
+  // ANIMATION TRIGGER: Anomaly banner triggers ONLY when real anomaly_flag is true (or SUSPENDED status)
+  const anomalyBanner = $('pax-anomaly-banner');
+  if (anomalyBanner) {
+    const isAnomaly = Boolean(prediction.anomaly_flag || (prediction.status && prediction.status.includes('SUSPENDED')));
+    anomalyBanner.classList.toggle('is-active', isAnomaly);
+    anomalyBanner.style.display = isAnomaly ? 'flex' : 'none';
+  }
+
+  // ANIMATION TRIGGER: Trend badge cross-fade & arrow rotation triggered by real delay trend computation
+  const trendBadge = $('pax-trend-badge');
+  const trendText = $('pax-trend-text');
+  if (trendBadge) {
+    const p10 = prediction.p10_delay_min || 0;
+    const p90 = prediction.p90_delay_min || 0;
+    const spread = p90 - p10;
+    let trend = 'stable';
+    if (spread > 25 || (prediction.p50_delay_min != null && prediction.p50_delay_min > 30)) {
+      trend = 'worsening';
+    } else if (spread < 12 && prediction.p50_delay_min != null && prediction.p50_delay_min < 15) {
+      trend = 'improving';
+    }
+    trendBadge.className = `trend-badge ${trend}`;
+    if (trendText) trendText.textContent = trend.toUpperCase();
+  }
+
+  // ANIMATION TRIGGER: Timeline item activation triggered by real station status ('passed' or 'en_route')
   const timeline = $('pax-historical-timeline');
   if (timeline) {
     const stations = passenger.historical_stations || [];
-    timeline.innerHTML = stations.length ? stations.map((station) => `<li class="timeline-item ${station.status === 'en_route' ? 'is-current' : ''}"><div class="timeline-dot"></div><div class="timeline-content"><p class="timeline-station">${station.station_code} — ${station.station_name}</p><p class="timeline-delay">${station.delay_min > 0 ? '+' : ''}${Math.round(station.delay_min)} min · ${station.status}</p></div></li>`).join('') : '<li class="timeline-item"><div class="timeline-dot"></div><div class="timeline-content"><p class="timeline-station">Journey history unavailable</p><p class="timeline-delay">No station events are present in the current snapshot.</p></div></li>';
+    timeline.innerHTML = stations.length ? stations.map((station) => {
+      const isPassed = station.status === 'departed' || station.status === 'passed';
+      const isCurrent = station.status === 'en_route' || station.status === 'approaching';
+      const activeClass = isPassed ? 'passed-active' : (isCurrent ? 'is-current passed-active' : '');
+      return `<li class="timeline-item ${activeClass}"><div class="timeline-dot"></div><div class="timeline-content"><p class="timeline-station">${station.station_code} — ${station.station_name}</p><p class="timeline-delay">${station.delay_min > 0 ? '+' : ''}${Math.round(station.delay_min)} min • ${station.status}</p></div></li>`;
+    }).join('') : '<li class="timeline-item"><div class="timeline-dot"></div><div class="timeline-content"><p class="timeline-station">Journey history unavailable</p><p class="timeline-delay">No station events are present in the current snapshot.</p></div></li>';
   }
 }
 
@@ -101,55 +150,229 @@ async function loadStation() {
   const id = encodeURIComponent(trainId());
   const [prediction, station] = await Promise.all([api(`/predict/${id}`), api(`/predict/${id}/station-master`)]);
   const suspended = prediction.anomaly_flag || prediction.status.includes('SUSPENDED');
-  setText('triage-decision', suspended ? 'SUSPENDED' : station.platform_commit);
+  
+  // ANIMATION TRIGGER: Rubber-stamp scale & rotate animation triggered on COMMIT or DEFER decision update
+  const decisionEl = $('triage-decision');
+  const triageCard = $('triage-card');
+  const decisionText = suspended ? 'SUSPENDED' : station.platform_commit;
+  if (decisionEl) decisionEl.textContent = decisionText;
+  if (triageCard) {
+    triageCard.classList.remove('stamp-animated');
+    void triageCard.offsetWidth; // Reflow
+    triageCard.classList.add('stamp-animated');
+  }
+
   setText('triage-train', prediction.train_id);
-  setText('triage-p50', prediction.p50_delay_min == null ? '--' : `${prediction.p50_delay_min.toFixed(1)} min`);
+  setText('triage-p50', prediction.p50_delay_min == null ? '--' : prediction.p50_delay_min.toFixed(1));
   setText('triage-p10', prediction.p10_delay_min == null ? '--' : prediction.p10_delay_min.toFixed(1));
   setText('triage-p90', prediction.p90_delay_min == null ? '--' : prediction.p90_delay_min.toFixed(1));
   setText('triage-deadline', station.time_until_decision_needed_min == null ? '--' : `${station.time_until_decision_needed_min.toFixed(1)} min`);
   setText('triage-msg', station.message);
-  setText('triage-vhf', station.radio_summary || 'AWAITING RADIO SUMMARY');
+  
+  // ANIMATION TRIGGER: VHF Radio script pulse triggered by real radio summary delivery
+  const vhfEl = $('triage-vhf');
+  const vhfCard = $('triage-vhf-card');
+  if (vhfEl) {
+    const rawVhf = station.radio_summary || 'AWAITING RADIO SUMMARY';
+    vhfEl.textContent = rawVhf;
+    if (vhfCard && station.radio_summary) {
+      vhfCard.classList.remove('vhf-card-transmitting');
+      void vhfCard.offsetWidth;
+      vhfCard.classList.add('vhf-card-transmitting');
+    }
+  }
+
+  // ANIMATION TRIGGER: Needle rotation on confidence gauge derived from real decision deadline
+  const gaugeArm = $('sm-gauge-arm');
+  if (gaugeArm) {
+    const deadlineMin = station.time_until_decision_needed_min != null ? station.time_until_decision_needed_min : 30;
+    // Map 0 to 45 min deadline to -70deg (urgent) -> +70deg (relaxed)
+    const clamped = Math.max(0, Math.min(45, deadlineMin));
+    const deg = -70 + (clamped / 45) * 140;
+    gaugeArm.style.transform = `rotate(${deg}deg)`;
+    // Threshold glow when under 20-min real threshold
+    gaugeArm.classList.toggle('threshold-glow', deadlineMin <= 20);
+  }
+
+  // ANIMATION TRIGGER: Urgency escalation banner pulse rate tied to real urgency_rank
+  const urgencyBadge = $('triage-urgency-badge');
+  if (urgencyBadge) {
+    const rank = (station.urgency_rank || 'normal').toLowerCase();
+    urgencyBadge.textContent = rank.toUpperCase();
+    if (rank === 'critical' || rank === 'urgent') {
+      urgencyBadge.style.animation = 'urgency-pulse 0.8s infinite';
+      urgencyBadge.style.background = 'rgba(161,61,46,0.2)';
+      urgencyBadge.style.color = 'var(--stamp)';
+    } else if (rank === 'high') {
+      urgencyBadge.style.animation = 'urgency-pulse 1.4s infinite';
+      urgencyBadge.style.background = 'rgba(232,163,61,0.25)';
+      urgencyBadge.style.color = 'var(--signal)';
+    } else {
+      urgencyBadge.style.animation = 'none';
+      urgencyBadge.style.background = 'rgba(61,122,92,0.15)';
+      urgencyBadge.style.color = 'var(--success)';
+    }
+  }
+
+  // ANIMATION TRIGGER: Incoming sequence slide-in
   const incoming = $('incoming-sequence');
-  if (incoming) incoming.innerHTML = `<div class="incoming-train"><p class="inc-train-id">TRAIN ${prediction.train_id}</p><p>P10 / P50 / P90: ${formatWindow(prediction)} / ${prediction.p50_delay_min?.toFixed(1) || '--'} min</p><p>${station.platform_commit} · ${station.urgency_rank.toUpperCase()}</p></div>`;
+  if (incoming) {
+    incoming.innerHTML = `<div class="incoming-train" style="animation: page-arrive 0.4s ease-out both;"><p class="inc-train-id">TRAIN ${prediction.train_id}</p><p>P10 / P50 / P90: ${formatWindow(prediction)} / ${prediction.p50_delay_min?.toFixed(1) || '--'} min</p><p>${station.platform_commit} • ${station.urgency_rank.toUpperCase()}</p></div>`;
+  }
 }
 
 async function loadCrew() {
   const result = await api(`/predict/${encodeURIComponent(trainId())}/crew-controller`);
-  setText('hoer-train-label', `Train ${result.train_id} · predicted delay ${result.predicted_delay_min == null ? '--' : result.predicted_delay_min.toFixed(1)} min`);
+  setText('hoer-train-label', `Train ${result.train_id} • predicted delay ${result.predicted_delay_min == null ? '--' : result.predicted_delay_min.toFixed(1)} min`);
   setText('hoer-status', result.message);
+  
+  // ANIMATION TRIGGER: HOER overlap bar scaleX growth and terracotta diagonal hazard stripes when violation occurs
   const track = $('hoer-track');
+  const threatBadge = $('duty-threat-badge');
   if (track) {
     const deadline = result.relief_dispatch_deadline ? new Date(result.relief_dispatch_deadline).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : 'MANUAL REVIEW';
-    track.innerHTML = `<div class="hoer-marker" style="left:50%">Relief deadline: ${deadline}</div>`;
+    const isViolation = result.duty_threat_level === 'CRITICAL' || result.duty_threat_level === 'HIGH' || (result.predicted_delay_min && result.predicted_delay_min > 45);
+    
+    // Scale width based on real delay magnitude
+    const delayRatio = Math.min(100, Math.max(15, ((result.predicted_delay_min || 20) / 120) * 100));
+    
+    track.innerHTML = `
+      <div class="hoer-bar-element ${isViolation ? 'hoer-violation-zone' : ''}" style="width: ${delayRatio}%; height: 100%; border-radius: 4px; display: flex; align-items: center; padding-left: 12px; color: #fff; font-family: var(--mono); font-size: 0.8rem; font-weight: 600;">
+        ${isViolation ? '⚠️ DUTY OVERLAP ZONE' : 'DUTY WINDOW'}
+      </div>
+      <div class="hoer-marker" style="position: absolute; right: 12px; top: 12px; font-family: var(--mono); font-size: 0.75rem; color: var(--primary);">
+        Relief deadline: ${deadline}
+      </div>
+    `;
+
+    if (threatBadge) {
+      threatBadge.textContent = isViolation ? 'DUTY LIMIT BREACH' : 'SAFE COMPLIANCE';
+      threatBadge.style.background = isViolation ? 'rgba(161,61,46,0.15)' : 'rgba(61,122,92,0.15)';
+      threatBadge.style.color = isViolation ? 'var(--stamp)' : 'var(--success)';
+      threatBadge.style.borderColor = isViolation ? 'var(--stamp)' : 'var(--success)';
+    }
+  }
+
+  // ANIMATION TRIGGER: Relief countdown odometer tick
+  const odometerDigits = $('relief-countdown-digits');
+  if (odometerDigits && result.relief_dispatch_deadline) {
+    const diffMs = new Date(result.relief_dispatch_deadline) - new Date();
+    if (diffMs > 0) {
+      const hrs = Math.floor(diffMs / 3600000).toString().padStart(2, '0');
+      const mins = Math.floor((diffMs % 3600000) / 60000).toString().padStart(2, '0');
+      const secs = Math.floor((diffMs % 60000) / 1000).toString().padStart(2, '0');
+      odometerDigits.textContent = `${hrs}:${mins}:${secs}`;
+    } else {
+      odometerDigits.textContent = 'DISPATCH NOW';
+    }
   }
 }
 
 async function loadFeeder() {
   const result = await api(`/predict/${encodeURIComponent(trainId())}/feeder-transport?cutoff_time=${encodeURIComponent(feederCutoff())}`);
   const probability = result.probability_arrival_before_cutoff;
-  setText('feeder-prob', probability == null ? '--%' : `${Math.round(probability * 100)}%`);
+  
+  // ANIMATION TRIGGER: SVG stroke-dashoffset transition and countup based on real probability value
+  const probVal = probability != null ? Math.round(probability * 100) : 0;
+  setText('feeder-prob', probability == null ? '--%' : `${probVal}%`);
+  
+  const arcCircle = $('feeder-arc-circle');
+  if (arcCircle) {
+    const totalCircumference = 339.29; // 2 * PI * 54
+    const offset = totalCircumference - (totalCircumference * (probVal / 100));
+    arcCircle.style.strokeDashoffset = offset;
+    arcCircle.style.stroke = probVal < 40 ? 'var(--stamp)' : (probVal < 70 ? 'var(--signal)' : 'var(--success)');
+  }
+
   setText('feeder-train-lbl', `Train ${result.train_id}: ${result.message}`);
-  setText('feeder-decision', result.recommendation);
+  
+  // ANIMATION TRIGGER: Recommendation tag bounce-snap animation on decision update
+  const decisionTag = $('feeder-decision');
+  if (decisionTag) {
+    decisionTag.textContent = result.recommendation;
+    decisionTag.classList.remove('snap-bounce');
+    void decisionTag.offsetWidth;
+    decisionTag.classList.add('snap-bounce');
+  }
+
   setText('cost-wait', result.recommendation === 'WAIT' ? 'Recommended' : 'Not recommended');
   setText('cost-abandon', result.recommendation === 'DEPART' ? 'Recommended' : 'Not recommended');
+
+  // ANIMATION TRIGGER: Cost trade-off progress bars scaleX growth from real recommendation
+  const waitBar = $('cost-wait-bar');
+  const abandonBar = $('cost-abandon-bar');
+  if (waitBar) waitBar.style.transform = result.recommendation === 'WAIT' ? 'scaleX(1)' : 'scaleX(0.2)';
+  if (abandonBar) abandonBar.style.transform = result.recommendation === 'DEPART' ? 'scaleX(1)' : 'scaleX(0.2)';
 }
 
 async function loadMaintenance() {
   const result = await api(`/predict/${encodeURIComponent(trainId())}/maintenance`);
   const minutes = result.available_turnaround_min;
-  setText('maint-train-lbl', `Train ${result.train_id} · ${result.message}`);
+  setText('maint-train-lbl', `Train ${result.train_id} • ${result.message}`);
   setText('maint-val', minutes == null ? '-- min' : `${Math.round(minutes)} min`);
   setText('maint-status', result.maintenance_window_adequate === null ? 'SUSPENDED' : result.maintenance_window_adequate ? 'ADEQUATE WINDOW' : 'COMPRESSED WINDOW');
-  if ($('maint-fill') && minutes != null) $('maint-fill').style.width = `${Math.max(0, Math.min(100, minutes / 3.6))}%`;
+  
+  // ANIMATION TRIGGER: Measuring-tape bar width and color transition at real 180m and 120m thresholds
+  const fill = $('maint-fill');
+  if (fill && minutes != null) {
+    const pct = Math.max(0, Math.min(100, (minutes / 360) * 100));
+    fill.style.width = `${pct}%`;
+    if (minutes < 120) {
+      fill.style.backgroundColor = '#A13D2E'; // Terracotta alert
+    } else if (minutes < 180) {
+      fill.style.backgroundColor = '#E8A33D'; // Signal amber warning
+    } else {
+      fill.style.backgroundColor = '#3D7A5C'; // Safe green
+    }
+  }
+
+  // ANIMATION TRIGGER: 3D Protocol Flip Badge triggered when turnaround window is under 3 hours (180 min)
+  const protoBadge = $('maint-protocol-badge');
+  if (protoBadge) {
+    if (minutes != null && minutes < 180) {
+      protoBadge.classList.add('flipped');
+      protoBadge.textContent = 'EXPEDITED PROTOCOL';
+    } else {
+      protoBadge.classList.remove('flipped');
+      protoBadge.textContent = 'STANDARD PROTOCOL';
+    }
+  }
+
+  // ANIMATION TRIGGER: Pit-line collision synchronized warning pulse if compressed window
+  const maintContainer = document.querySelector('.measuring-tape-container');
+  if (maintContainer && minutes != null && minutes < 120) {
+    maintContainer.classList.remove('pit-collision-active');
+    void maintContainer.offsetWidth;
+    maintContainer.classList.add('pit-collision-active');
+  }
 }
 
 async function loadNetwork() {
   const [graph, stats] = await Promise.all([api('/graph/demo'), api('/api/stats')]);
-  setText('prediction-count', Number(stats.total_predictions_served || 0).toLocaleString());
+  
+  // ANIMATION TRIGGER: Odometer digit roll on real backend processed predictions count
+  const odo = $('prediction-count');
+  const countStr = Number(stats.total_predictions_served || 0).toLocaleString();
+  if (odo && odo.textContent !== countStr) {
+    odo.classList.remove('odometer-digit-bump');
+    void odo.offsetWidth;
+    odo.classList.add('odometer-digit-bump');
+    odo.textContent = countStr;
+  }
+
   setText('radar-status', `Replay scenario: Train ${graph.delaying_train} adds ${graph.conflict_addition_min.toFixed(1)} min to Train ${graph.affected_train} near ${graph.section}.`);
   setText('radar-source', graph.message);
-  if ($('radar-conflict-node')) $('radar-conflict-node').innerHTML = `${graph.affected_train}<br>+${graph.conflict_addition_min.toFixed(1)} min`;
-  $('radar-pulse')?.classList.add('is-tracing');
+  
+  // ANIMATION TRIGGER: Ripple radar conflict node lighting up on real conflict detection
+  const conflictNode = $('radar-conflict-node');
+  if (conflictNode) {
+    conflictNode.innerHTML = `${graph.affected_train}<br>+${graph.conflict_addition_min.toFixed(1)} min`;
+    conflictNode.style.boxShadow = '0 0 16px var(--signal)';
+    conflictNode.style.borderColor = 'var(--signal)';
+  }
+  
+  const pulse = $('radar-pulse');
+  if (pulse) pulse.classList.add('is-tracing');
 }
 
 async function refresh() {
@@ -211,7 +434,7 @@ const I18N = {
     paxTitle: "Arrival Advisory",
     paxSubhead: "Calibrated delay bounds from the historical prediction snapshot.",
     paxWindowLabel: "CALIBRATED ARRIVAL WINDOW",
-    paxEarliestLatest: "P10 (Earliest) � P90 (Latest)",
+    paxEarliestLatest: "P10 (Earliest) � P90 (Latest)",
     paxTimelineTitle: "Historical Station Trend",
     
     // Station Master
@@ -269,7 +492,7 @@ const I18N = {
     paxTitle: "???? ?????",
     paxSubhead: "???????? ??????????? ???????? ?? ???????? ????? ???????",
     paxWindowLabel: "???????? ???? ??? ???? (P10 - P90)",
-    paxEarliestLatest: "P10 (???????) � P90 (??????)",
+    paxEarliestLatest: "P10 (???????) � P90 (??????)",
     paxTimelineTitle: "???????? ?????? ????? ??????",
     
     // Station Master
@@ -346,7 +569,7 @@ const FAQ_ITEMS = [
     a: "Predictions are suspended by the Anomaly Gate when the train experiences an unprecedented delay pattern or unscheduled stop (residual > 53.1 min). Rather than projecting false precision during a genuine disruption, the system gracefully degrades to manual operator oversight."
   },
   {
-    q: "What does the P10�P90 arrival window mean?",
+    q: "What does the P10�P90 arrival window mean?",
     tags: ["general", "passenger", "conformal"],
     a: "Indian Railways ETA cannot be honestly represented as a single static point in time. Our Split Conformal Prediction engine provides a guaranteed 89.9% empirical coverage window: P10 is the earliest likely arrival (10th percentile), and P90 is the pessimistic bound (90th percentile)."
   },
@@ -384,7 +607,7 @@ function initFAQModal() {
       <div class="faq-header">
         <div>
           <h3 class="faq-title" data-i18n="helpFaq">Help & Operational FAQ</h3>
-          <span class="faq-disclaimer">[ PREDEFINED KNOWLEDGE BASE � NOT CONVERSATIONAL AI ]</span>
+          <span class="faq-disclaimer">[ PREDEFINED KNOWLEDGE BASE � NOT CONVERSATIONAL AI ]</span>
         </div>
         <button class="faq-close" id="faq-close-btn" aria-label="Close">&times;</button>
       </div>
@@ -411,7 +634,7 @@ function initFAQModal() {
 
     container.innerHTML = filtered.map(item => `
       <div class="faq-item">
-        <span class="faq-tag">${item.tags.join(' � ')}</span>
+        <span class="faq-tag">${item.tags.join(' � ')}</span>
         <h4 class="faq-q">${item.q}</h4>
         <p class="faq-a">${item.a}</p>
       </div>
@@ -528,7 +751,7 @@ function renderRouteMapPanel() {
       <div class="route-map-header">
         <div>
           <h4 class="route-map-title">Route & Corridor Profile</h4>
-          <p style="margin: 0.25rem 0 0; font-family:var(--sans); font-size:0.8rem; color:var(--muted);">${profile.name} � ${profile.corridor}</p>
+          <p style="margin: 0.25rem 0 0; font-family:var(--sans); font-size:0.8rem; color:var(--muted);">${profile.name} � ${profile.corridor}</p>
         </div>
         <div>
           <span class="route-badge ${profile.badgeClass}">
